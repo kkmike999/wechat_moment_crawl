@@ -35,13 +35,40 @@ def save_article_content(page, initial_url: str) -> str:
     return output_file
 
 
-def main(initial_url: str | None = None):
-    if initial_url is None:
-        print("请传入要爬取的公众号文章URL")
-        initial_url = input("请输入URL: ").strip()
-        if not initial_url:
-            print("未输入URL，已退出")
+def main(initial_url: str | None = None, file_path: str | None = None):
+    urls: list[str] = []
+    # 若只传了 positional 参数且为已存在的文件，视为文件路径
+    if file_path is None and initial_url and os.path.isfile(initial_url):
+        file_path = initial_url
+        initial_url = None
+    if file_path:
+        # 从文件读取 URL，每行一个
+        if not os.path.isfile(file_path):
+            print(f"文件不存在: {file_path}")
             return
+        with open(file_path, "r", encoding="utf-8") as f:
+            urls = [line.strip() for line in f if line.strip()]
+        if not urls:
+            print("文件中没有有效的 URL")
+            return
+        print(f"从文件读取到 {len(urls)} 个 URL")
+    elif initial_url:
+        urls = [initial_url]
+    else:
+        print("请传入要爬取的公众号文章URL或文件路径")
+        user_input = input("请输入URL或文件路径: ").strip()
+        if not user_input:
+            print("未输入，已退出")
+            return
+        if os.path.isfile(user_input):
+            with open(user_input, "r", encoding="utf-8") as f:
+                urls = [line.strip() for line in f if line.strip()]
+            if not urls:
+                print("文件中没有有效的 URL")
+                return
+            print(f"从文件读取到 {len(urls)} 个 URL")
+        else:
+            urls = [user_input]
     
     with sync_playwright() as p:
         # 启动浏览器
@@ -58,8 +85,8 @@ def main(initial_url: str | None = None):
         )
         context = browser.new_context(
             user_agent=user_agent,
-            viewport={"width": 1920, "height": 1080},  # Windows 常见分辨率
-            screen={"width": 1920, "height": 1080},
+            viewport={"width": 1080, "height": 1920},  # Windows 常见分辨率
+            screen={"width": 1080, "height": 1920},
             locale="zh-CN",  # 中文环境
         )
         
@@ -68,14 +95,17 @@ def main(initial_url: str | None = None):
         # 注入 stealth 脚本隐藏自动化特征
         Stealth().apply_stealth_sync(page)
         
-        print(f"[1/5] 开始访问: {initial_url}")
-        
         try:
-            save_article_content(page, initial_url)
-        except Exception as e:
-            print(f"错误: {e}")
+            for i, url in enumerate(urls, 1):
+                print(f"\n{'='*50}")
+                print(f"[{i}/{len(urls)}] 开始访问: {url}")
+                try:
+                    save_article_content(page, url)
+                except Exception as e:
+                    print(f"错误: {e}")
         finally:
             browser.close()
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="微信公众号文章爬虫")
@@ -83,7 +113,13 @@ if __name__ == "__main__":
         "url",
         nargs="?",
         default=None,
-        help="要爬取的公众号文章URL（不传则会在运行时提示输入）",
+        help="要爬取的公众号文章URL，或 URL 列表文件路径（每行一个 URL）",
+    )
+    parser.add_argument(
+        "-f", "--file",
+        dest="file_path",
+        default=None,
+        help="URL 列表文件路径，每行一个 URL",
     )
     args = parser.parse_args()
-    main(initial_url=args.url)
+    main(initial_url=args.url, file_path=args.file_path)
