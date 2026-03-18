@@ -1,5 +1,6 @@
 import argparse
 import sys
+import os
 from playwright.sync_api import sync_playwright
 # https://github.com/Mattwmaster58/playwright_stealth
 from playwright_stealth import Stealth
@@ -37,13 +38,26 @@ def main(initial_url: str | None = None, file_path: str | None = None):
 
         # 注入 stealth 脚本隐藏自动化特征
         Stealth().apply_stealth_sync(page)
+
+        # 读取temp/success_urls.txt
+        success_urls = []
+        with open(os.path.join(os.getcwd(), "temp", "success_urls.txt"), "r", encoding="utf-8") as f:
+            success_urls = [line.strip() for line in f if line.strip()]
         
         try:
             for i, url in enumerate(urls, 1):
+                # success_urls中存在的url不再访问
+                if url in success_urls:
+                    print(f"[{i}/{len(urls)}] 已访问过: {url}")
+                    continue
+                
                 print(f"\n{'='*50}")
                 print(f"[{i}/{len(urls)}] 开始访问: {url}")
                 try:
-                    save_article_content(page, url)
+                    result = save_article_content(page, url)
+                    if result in (None, ""):
+                        print("返回空，重试 1 次...")
+                        result = save_article_content(page, url)
                 except Exception as e:
                     print(f"错误: {e}")
         finally:

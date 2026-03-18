@@ -33,10 +33,11 @@ def visit_and_wait_for_content(page: Page, url: str) -> None:
     time.sleep(3)  # 额外等待JS渲染
 
 
-def save_article_content(page: Page, initial_url: str) -> str:
+def save_article_content(page: Page, url: str) -> str:
     """访问URL、获取页面内容并保存到 temp/<title>.md"""
-    visit_and_wait_for_content(page, initial_url)
+    visit_and_wait_for_content(page, url)
 
+    # current_url可能重定向过
     current_url = page.url
     print(f"[2/5] 当前URL: {current_url}")
     print("[3/5] 页面加载完成")
@@ -51,11 +52,20 @@ def save_article_content(page: Page, initial_url: str) -> str:
     else:
         print("⚠ 未找到 #js_article，使用整页")
         content = page.content()
-        
-    content = html_to_markdown(content)
+
+    # 创建 temp 目录
     temp_dir = os.path.join(os.getcwd(), "temp")
     os.makedirs(temp_dir, exist_ok=True)
 
+    if "当前环境异常，完成验证后即可继续访问" in content:
+        print("错误：微信页面需要验证，请完成验证后重试")
+        
+        with open(os.path.join(temp_dir, "error_urls.txt"), "a", encoding="utf-8") as f:
+            f.write(url + "\n")
+        return None
+
+    content = html_to_markdown(content)
+    
     title = page.title() or "weixin_article"
     safe_name = re.sub(r'[\\/:*?"<>|]', "_", title.strip())[:200]
 
@@ -68,4 +78,9 @@ def save_article_content(page: Page, initial_url: str) -> str:
     print(f"[5/5] 成功保存到: {output_file}")
     print(f"    文件大小: {len(content):,} 字符")
     print(f"    {'✓ 已提取 #js_article' if has_js_article else '⚠ 未找到 #js_article，使用整页'}")
+
+    # 将url写入 temp/success_urls.txt
+    with open(os.path.join(temp_dir, "success_urls.txt"), "a", encoding="utf-8") as f:
+        f.write(current_url + "\n")
+
     return output_file
